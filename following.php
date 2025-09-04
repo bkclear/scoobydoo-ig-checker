@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>👥 Scooby Doo - Followers Viewer</title>
+  <title>👥 Scooby Doo - Following Viewer</title>
   <style>
     body { background:black; color:#0f0; font-family:monospace; padding:20px; }
     h2 { text-align:center; color:#0f0; }
@@ -22,10 +22,10 @@
   </style>
 </head>
 <body>
-  <h2>👥 Scooby Doo - Followers Viewer</h2>
-  <form id="followerForm">
+  <h2>👥 Scooby Doo - Following Viewer</h2>
+  <form id="followingForm">
     <input type="text" id="targetUser" placeholder="Enter target username" required>
-    <button type="submit">🔍 View Followers</button>
+    <button type="submit">🔍 View Following</button>
     <button type="button" id="refreshBtn" style="display:none;">🔄 Refresh</button>
   </form>
 
@@ -34,38 +34,38 @@
 <script>
 let lastUser = null;
 
-document.getElementById("followerForm").addEventListener("submit", function(e){
+document.getElementById("followingForm").addEventListener("submit", function(e){
   e.preventDefault();
   let username = document.getElementById("targetUser").value.trim();
   if (!username) return;
   lastUser = username;
-  fetchFollowers(username);
+  fetchFollowing(username);
   document.getElementById("refreshBtn").style.display = "inline-block";
 });
 
 document.getElementById("refreshBtn").addEventListener("click", function(){
-  if (lastUser) fetchFollowers(lastUser);
+  if (lastUser) fetchFollowing(lastUser);
 });
 
-function fetchFollowers(username) {
+function fetchFollowing(username) {
   lastUser = username;
-  document.getElementById("result").innerHTML = "<p>⏳ Fetching followers for @" + username + "...</p>";
+  document.getElementById("result").innerHTML = "<p>⏳ Fetching following for @" + username + "...</p>";
 
-  fetch("view_followers.php?username=" + encodeURIComponent(username))
+  fetch("view_following.php?username=" + encodeURIComponent(username))
     .then(res => res.json())
     .then(data => {
       if (data.error) {
         document.getElementById("result").innerHTML = "<p style='color:red;'>⚠ " + data.error + "</p>";
         return;
       }
-      if (!data.followers || data.followers.length === 0) {
-        document.getElementById("result").innerHTML = "<p>No followers found.</p>";
+      if (!data.following || data.following.length === 0) {
+        document.getElementById("result").innerHTML = "<p>No following found.</p>";
         return;
       }
 
-      let filtered = data.followers.filter(f => f.follower_count <= 2000);
+      let filtered = data.following.filter(f => f.follower_count <= 2000);
 
-      let html = `<h3>Followers of @${username} (≤ 2000 followers)</h3>`;
+      let html = `<h3>Following of @${username} (≤ 2000 followers)</h3>`;
       html += `<div class="grid">`;
 
       filtered.forEach(f => {
@@ -73,7 +73,7 @@ function fetchFollowers(username) {
         html += `
           <div class="card">
             <img src="${f.profile_pic}" alt="pic">
-            <div class="username" onclick="fetchFollowers('${f.username}')">@${f.username}</div>
+            <div class="username">@${f.username}</div>
             <div>${f.full_name || ''}</div>
             <div class="small">Followers: ${f.follower_count}</div>
             <a href="${profileUrl}" target="_blank" class="iglink">🔗 Open on Instagram</a>
@@ -85,7 +85,7 @@ function fetchFollowers(username) {
       document.getElementById("result").innerHTML = html;
     })
     .catch(err => {
-      document.getElementById("result").innerHTML = "<p style='color:red;'>Error fetching followers</p>";
+      document.getElementById("result").innerHTML = "<p style='color:red;'>Error fetching following</p>";
       console.error(err);
     });
 }
