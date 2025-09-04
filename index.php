@@ -72,7 +72,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   <h1>🕵️ Scooby Doo - Username Checker</h1>
   <div style="text-align:center;">
     <a href="index.php">🔍 Username Checker</a> | 
-    <a href="followers.php">👥 Followers Viewer</a>
+    <a href="following.php">👥 Followers Viewer</a>
   </div>
   <br>
   <form method="post">
