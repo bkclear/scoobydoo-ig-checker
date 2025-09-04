@@ -12,6 +12,7 @@ if (preg_match('/csrftoken=([^;]+)/', $cookies, $m)) {
 
 function checkUser($username, $cookies, $csrftoken) {
     $url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
+
     $headers = [
         "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
         "Accept: application/json",
@@ -26,7 +27,7 @@ function checkUser($username, $cookies, $csrftoken) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 8); // faster timeout
     $response = curl_exec($ch);
     $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -49,11 +50,12 @@ function checkUser($username, $cookies, $csrftoken) {
     return ["status" => "error", "followers" => 0, "following" => 0];
 }
 
-$username = $_GET['username'] ?? "";
-if (!$username) {
-    die(json_encode(["status"=>"error","followers"=>0,"following"=>0]));
+if (!isset($_GET['username']) || empty($_GET['username'])) {
+    echo json_encode(["status"=>"error","message"=>"No username"]);
+    exit;
 }
 
+$username = trim($_GET['username']);
 $userData = file_exists($dataFile) ? json_decode(file_get_contents($dataFile), true) : [];
 if (!is_array($userData)) $userData = [];
 
@@ -67,4 +69,19 @@ $userData[$username] = [
     "history" => $userData[$username]['history'] ?? []
 ];
 
-$userData[$
+$userData[$username]['history'][] = [
+    "time" => date("Y-m-d H:i:s"),
+    "followers" => $result['followers'],
+    "following" => $result['following']
+];
+
+// save back
+file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
+
+echo json_encode([
+    "username" => $username,
+    "status" => $result['status'],
+    "followers" => $result['followers'],
+    "following" => $result['following'],
+    "last_checked" => date("Y-m-d H:i:s")
+]);
