@@ -233,7 +233,7 @@ function refreshUser(username,index){
     });
 }
 function refreshAll(){document.querySelectorAll("#userTable tr").forEach((row,i)=>{if(i>0){let u=row.cells[0].innerText.replace("@","");refreshUser(u,i-1);}});}
-function toggleAuto(countdown,index){
+function toggleAuto(username,index){
   if(timers[index]){clearInterval(timers[index].id);delete timers[index];document.getElementById("countdown"+index).innerText="";return;}
   let seconds=interval;
   document.getElementById("countdown"+index).innerText="Next "+seconds+"s";
