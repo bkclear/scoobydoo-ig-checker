@@ -11,8 +11,16 @@ th,td { padding:8px; border:1px solid #0f0; text-align:left; font-size:14px; }
 .not_found { background:#f00; color:#fff; }
 .invalid_session { background:#555; color:#fff; }
 .error { background:#ff0; color:#000; }
-.clickable { cursor:pointer; }
+.clickable a { color:#0f0; text-decoration:none; }
+.clickable a:hover { text-decoration:underline; }
 .table-wrapper { overflow-x:auto; }
+
+/* Tabs */
+.tabs { display:flex; justify-content:center; margin:10px 0; }
+.tablink { flex:1; padding:10px; cursor:pointer; background:#111; border:none; color:#0f0; font-weight:bold; }
+.tablink.active { background:#0f0; color:#000; }
+.tabcontent { display:none; }
+
 @media(max-width:600px){
   table,th,td{font-size:12px;}
   button{padding:6px 10px; font-size:12px;}
