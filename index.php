@@ -2,142 +2,114 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$filename     = "usernames.txt";
-$cookiesFile  = "cookies.txt";
-$lastUpdated  = file_exists("cookies_updated.txt") ? file_get_contents("cookies_updated.txt") : "Never";
+$cookiesFile = "cookies.txt";
+$filename    = "usernames.txt";
 
-$savedUsernames = file_exists($filename) ? file($filename, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : [];
-$cookies        = file_exists($cookiesFile) ? trim(file_get_contents($cookiesFile)) : "";
+// Load usernames with timestamp
+$savedUsernames = [];
+if (file_exists($filename)) {
+    $lines = file($filename, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        [$u, $t] = array_pad(explode("|", $line), 2, "");
+        $savedUsernames[] = ["username" => $u, "time" => $t];
+    }
+}
 
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $action = $_POST['action'] ?? "";
-
-    if ($action === "saveCookies" && !empty($_POST["cookies"])) {
-        $cookies = trim($_POST["cookies"]);
-        file_put_contents($cookiesFile, $cookies);
-        file_put_contents("cookies_updated.txt", date("Y-m-d H:i:s"));
-    }
+    $action = $_POST['action'] ?? '';
 
     if ($action === "addUsername" && !empty($_POST["newUsername"])) {
         $newUsername = trim($_POST["newUsername"]);
-        if (!in_array($newUsername, $savedUsernames)) {
-            $savedUsernames[] = $newUsername;
-            file_put_contents($filename, implode("\n", $savedUsernames));
+        $time = date("Y-m-d H:i:s");
+
+        $already = array_column($savedUsernames, "username");
+        if (!in_array($newUsername, $already)) {
+            $savedUsernames[] = ["username" => $newUsername, "time" => $time];
+            $lines = array_map(fn($row) => $row["username"] . "|" . $row["time"], $savedUsernames);
+            file_put_contents($filename, implode("\n", $lines));
         }
     }
 
-    if ($action === "bulkAdd" && !empty($_POST["bulkUsernames"])) {
-        $bulkList = explode("\n", trim($_POST["bulkUsernames"]));
-        foreach ($bulkList as $name) {
-            $name = trim($name);
-            if ($name !== "" && !in_array($name, $savedUsernames)) {
-                $savedUsernames[] = $name;
-            }
-        }
-        file_put_contents($filename, implode("\n", $savedUsernames));
-    }
-
-    if ($action === "deleteUsername" && !empty($_POST["deleteUser"])) {
-        $deleteUser = trim($_POST["deleteUser"]);
-        $savedUsernames = array_filter($savedUsernames, fn($u) => $u !== $deleteUser);
-        file_put_contents($filename, implode("\n", $savedUsernames));
+    if ($action === "deleteUser" && !empty($_POST['username'])) {
+        $usernameToDelete = trim($_POST['username']);
+        $savedUsernames = array_filter($savedUsernames, fn($row) => $row["username"] !== $usernameToDelete);
+        $lines = array_map(fn($row) => $row["username"] . "|" . $row["time"], $savedUsernames);
+        file_put_contents($filename, implode("\n", $lines));
     }
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
   <meta charset="UTF-8">
-  <title>🕵️ Username Checker</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <link rel="stylesheet" href="style.css">
+  <title>Scooby Doo 🕵️ Username Checker</title>
+  <style>
+    body { background:#000; color:#0f0; font-family:monospace; padding:15px; }
+    h1 { text-align:center; }
+    form { margin:15px 0; }
+    input, textarea { padding:6px; border:1px solid #0f0; border-radius:5px; background:#111; color:#0f0; }
+    button { padding:6px 12px; border:none; border-radius:5px; margin-left:5px; cursor:pointer; }
+    .addBtn { background:#0f0; color:#000; }
+    .deleteBtn { background:#f00; color:#fff; }
+    .refreshBtn { background:#06f; color:#fff; }
+    table { width:100%; border-collapse:collapse; margin-top:20px; background:#111; }
+    th, td { padding:8px; border:1px solid #0f0; text-align:left; }
+    .badge { padding:4px 8px; border-radius:12px; font-size:13px; }
+    .exists { background:#0f0; color:#000; }
+    .not_found { background:#f00; color:#fff; }
+    .error { background:#ff0; color:#000; }
+    .invalid_session { background:#555; color:#fff; }
+  </style>
 </head>
 <body>
-  <h1>🕵️ Username Checker</h1>
+  <h1>🕵️ Scooby Doo - Username Checker</h1>
 
-  <!-- Tabs -->
-  <div class="tabs">
-    <button class="tablink active" onclick="openTab(event,'checker')">Checker</button>
-    <button class="tablink" onclick="openTab(event,'settings')">Settings</button>
-  </div>
+  <!-- Add single username -->
+  <form method="post">
+    <input type="text" name="newUsername" placeholder="Enter username">
+    <button type="submit" name="action" value="addUsername" class="addBtn">➕ Add</button>
+  </form>
 
-  <!-- Username Checker -->
-  <div id="checker" class="tabcontent" style="display:block;">
-    <form method="post">
-      <label>Add Username:</label>
-      <input type="text" name="newUsername" placeholder="Enter username">
-      <button type="submit" name="action" value="addUsername">➕ Add</button>
-    </form>
-
-    <form method="post">
-      <label>Bulk Add:</label>
-      <textarea name="bulkUsernames" rows="4" placeholder="user1&#10;user2"></textarea>
-      <button type="submit" name="action" value="bulkAdd">📥 Bulk Add</button>
-    </form>
-
-    <?php if (!empty($savedUsernames)): ?>
-    <div class="table-wrapper">
-      <table>
-        <tr>
-          <th>Username</th>
-          <th>Status</th>
-          <th>Followers</th>
-          <th>Following</th>
-          <th>Actions</th>
-        </tr>
-        <?php foreach ($savedUsernames as $i => $username): ?>
-        <tr id="row<?php echo $i; ?>">
-          <td class="clickable">
-            <a href="https://instagram.com/<?php echo htmlspecialchars($username); ?>" target="_blank">
-              @<?php echo htmlspecialchars($username); ?>
-            </a>
-          </td>
-          <td><span class="badge" id="status<?php echo $i; ?>">-</span></td>
-          <td id="followers<?php echo $i; ?>">-</td>
-          <td id="following<?php echo $i; ?>">-</td>
-          <td>
-            <button type="button" onclick="refreshUser('<?php echo $username; ?>',<?php echo $i; ?>)">🔄</button>
-            <form method="post" style="display:inline;" onsubmit="return confirm('Delete @<?php echo $username; ?>?');">
-              <input type="hidden" name="deleteUser" value="<?php echo htmlspecialchars($username); ?>">
-              <button type="submit" name="action" value="deleteUsername" class="delete">🗑</button>
-            </form>
-            <div class="countdown" id="countdown<?php echo $i; ?>"></div>
-          </td>
-        </tr>
-        <?php endforeach; ?>
-      </table>
-    </div>
-    <?php endif; ?>
-  </div>
-
-  <!-- Settings Tab -->
-  <div id="settings" class="tabcontent">
-    <form method="post">
-      <label>Paste Instagram Cookies:</label>
-      <textarea name="cookies" rows="4"><?php echo htmlspecialchars($cookies); ?></textarea>
-      <br><small>Last updated: <?php echo $lastUpdated; ?></small><br>
-      <button type="submit" name="action" value="saveCookies">💾 Save Cookies</button>
-    </form>
-  </div>
+  <?php if (!empty($savedUsernames)): ?>
+  <table>
+    <tr>
+      <th>Username</th>
+      <th>Added At</th>
+      <th>Status</th>
+      <th>Followers</th>
+      <th>Following</th>
+      <th>Actions</th>
+    </tr>
+    <?php foreach ($savedUsernames as $i => $row): ?>
+    <tr>
+      <td>@<?php echo htmlspecialchars($row["username"]); ?></td>
+      <td><?php echo htmlspecialchars($row["time"]); ?></td>
+      <td><span class="badge" id="status<?php echo $i; ?>">-</span></td>
+      <td id="followers<?php echo $i; ?>">-</td>
+      <td id="following<?php echo $i; ?>">-</td>
+      <td>
+        <button type="button" class="refreshBtn" onclick="refreshUser('<?php echo $row["username"]; ?>',<?php echo $i; ?>)">🔄 Refresh</button>
+        <form method="post" style="display:inline;">
+          <input type="hidden" name="username" value="<?php echo htmlspecialchars($row["username"]); ?>">
+          <button type="submit" name="action" value="deleteUser" class="deleteBtn">🗑 Delete</button>
+        </form>
+      </td>
+    </tr>
+    <?php endforeach; ?>
+  </table>
+  <?php endif; ?>
 
 <script>
-function openTab(evt, tabName) {
-  document.querySelectorAll(".tabcontent").forEach(t => t.style.display = "none");
-  document.querySelectorAll(".tablink").forEach(b => b.classList.remove("active"));
-  document.getElementById(tabName).style.display = "block";
-  evt.currentTarget.classList.add("active");
-}
-
-function refreshUser(username,index){
-  fetch("refresh.php?username="+encodeURIComponent(username))
-    .then(res=>res.json())
-    .then(data=>{
-      document.getElementById("status"+index).textContent=data.status;
-      document.getElementById("status"+index).className="badge "+data.status;
-      document.getElementById("followers"+index).textContent=data.followers;
-      document.getElementById("following"+index).textContent=data.following;
+function refreshUser(username, index) {
+  fetch("refresh.php?username=" + encodeURIComponent(username))
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById("status" + index).textContent = data.status.replace("_", " ");
+      document.getElementById("status" + index).className = "badge " + data.status;
+      document.getElementById("followers" + index).textContent = data.followers;
+      document.getElementById("following" + index).textContent = data.following;
     })
-    .catch(err=>console.error(err));
+    .catch(err => console.error("Error:", err));
 }
 </script>
 </body>
