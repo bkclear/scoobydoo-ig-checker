@@ -50,5 +50,6 @@ function checkUser($username, $cookies, $csrftoken) {
 
 $username = $_GET['username'] ?? "";
 if ($username) {
+    header("Content-Type: application/json");
     echo json_encode(checkUser($username, $cookies, $csrftoken));
 }
