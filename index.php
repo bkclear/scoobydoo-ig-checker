@@ -1,116 +1,143 @@
 <?php
+// index.php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$cookiesFile = "cookies.txt";
-$filename    = "usernames.txt";
-
-// Load usernames with timestamp
-$savedUsernames = [];
-if (file_exists($filename)) {
-    $lines = file($filename, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
-    foreach ($lines as $line) {
-        [$u, $t] = array_pad(explode("|", $line), 2, "");
-        $savedUsernames[] = ["username" => $u, "time" => $t];
-    }
+$file = "usernames.json";
+if (!file_exists($file)) {
+    file_put_contents($file, "[]");
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST") {
-    $action = $_POST['action'] ?? '';
-
-    if ($action === "addUsername" && !empty($_POST["newUsername"])) {
-        $newUsername = trim($_POST["newUsername"]);
-        $time = date("Y-m-d H:i:s");
-
-        $already = array_column($savedUsernames, "username");
-        if (!in_array($newUsername, $already)) {
-            $savedUsernames[] = ["username" => $newUsername, "time" => $time];
-            $lines = array_map(fn($row) => $row["username"] . "|" . $row["time"], $savedUsernames);
-            file_put_contents($filename, implode("\n", $lines));
-        }
-    }
-
-    if ($action === "deleteUser" && !empty($_POST['username'])) {
-        $usernameToDelete = trim($_POST['username']);
-        $savedUsernames = array_filter($savedUsernames, fn($row) => $row["username"] !== $usernameToDelete);
-        $lines = array_map(fn($row) => $row["username"] . "|" . $row["time"], $savedUsernames);
-        file_put_contents($filename, implode("\n", $lines));
-    }
+function readData($file) {
+    return json_decode(file_get_contents($file), true) ?: [];
 }
+
+function saveData($file, $data) {
+    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT));
+}
+
+// Handle add username
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
+    $username = trim($_POST['username']);
+    if ($username !== "") {
+        $data = readData($file);
+        $data[] = [
+            'id' => bin2hex(random_bytes(6)),
+            'username' => $username,
+            'created_at' => date('c')
+        ];
+        saveData($file, $data);
+    }
+    header("Location: index.php");
+    exit;
+}
+
+// Handle delete username
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
+    $id = $_POST['delete_id'];
+    $data = readData($file);
+    $data = array_values(array_filter($data, fn($r) => $r['id'] !== $id));
+    saveData($file, $data);
+    header("Location: index.php");
+    exit;
+}
+
+$data = readData($file);
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Scooby Doo 🕵️ Username Checker</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Scooby-Doo IG Checker</title>
   <style>
-    body { background:#000; color:#0f0; font-family:monospace; padding:15px; }
-    h1 { text-align:center; }
-    form { margin:15px 0; }
-    input, textarea { padding:6px; border:1px solid #0f0; border-radius:5px; background:#111; color:#0f0; }
-    button { padding:6px 12px; border:none; border-radius:5px; margin-left:5px; cursor:pointer; }
-    .addBtn { background:#0f0; color:#000; }
-    .deleteBtn { background:#f00; color:#fff; }
-    .refreshBtn { background:#06f; color:#fff; }
-    table { width:100%; border-collapse:collapse; margin-top:20px; background:#111; }
-    th, td { padding:8px; border:1px solid #0f0; text-align:left; }
-    .badge { padding:4px 8px; border-radius:12px; font-size:13px; }
-    .exists { background:#0f0; color:#000; }
-    .not_found { background:#f00; color:#fff; }
-    .error { background:#ff0; color:#000; }
-    .invalid_session { background:#555; color:#fff; }
+    body { font-family: Arial, sans-serif; margin: 0; padding: 1rem; background: #111; color: #eee; }
+    h1 { text-align: center; }
+    form { display: flex; gap: .5rem; justify-content: center; margin-bottom: 1rem; }
+    input[type="text"] { flex: 1; padding: .5rem; border-radius: 8px; border: none; }
+    button { padding: .5rem 1rem; border: none; border-radius: 8px; cursor: pointer; }
+    button.add { background: #28a745; color: #fff; }
+    button.delete { background: #dc3545; color: #fff; }
+    table { width: 100%; border-collapse: collapse; background: #222; }
+    th, td { padding: .75rem; text-align: left; border-bottom: 1px solid #444; }
+    th { background: #333; }
+    tr:hover { background: #2a2a2a; }
+    .time { font-size: .9em; color: #aaa; }
+    @media(max-width:600px){
+      table, thead, tbody, th, td, tr { display: block; }
+      th { display: none; }
+      td { border: none; padding: .5rem 0; }
+      td::before { font-weight: bold; display: block; }
+      td:nth-child(1)::before { content: "Username"; }
+      td:nth-child(2)::before { content: "Added"; }
+    }
   </style>
 </head>
 <body>
-  <h1>🕵️ Scooby Doo - Username Checker</h1>
+  <h1>🔍 Scooby-Doo IG Checker</h1>
 
-  <!-- Add single username -->
   <form method="post">
-    <input type="text" name="newUsername" placeholder="Enter username">
-    <button type="submit" name="action" value="addUsername" class="addBtn">➕ Add</button>
+    <input type="text" name="username" placeholder="Enter username..." required>
+    <button type="submit" class="add">Add</button>
   </form>
 
-  <?php if (!empty($savedUsernames)): ?>
   <table>
-    <tr>
-      <th>Username</th>
-      <th>Added At</th>
-      <th>Status</th>
-      <th>Followers</th>
-      <th>Following</th>
-      <th>Actions</th>
-    </tr>
-    <?php foreach ($savedUsernames as $i => $row): ?>
-    <tr>
-      <td>@<?php echo htmlspecialchars($row["username"]); ?></td>
-      <td><?php echo htmlspecialchars($row["time"]); ?></td>
-      <td><span class="badge" id="status<?php echo $i; ?>">-</span></td>
-      <td id="followers<?php echo $i; ?>">-</td>
-      <td id="following<?php echo $i; ?>">-</td>
-      <td>
-        <button type="button" class="refreshBtn" onclick="refreshUser('<?php echo $row["username"]; ?>',<?php echo $i; ?>)">🔄 Refresh</button>
-        <form method="post" style="display:inline;">
-          <input type="hidden" name="username" value="<?php echo htmlspecialchars($row["username"]); ?>">
-          <button type="submit" name="action" value="deleteUser" class="deleteBtn">🗑 Delete</button>
-        </form>
-      </td>
-    </tr>
-    <?php endforeach; ?>
+    <thead>
+      <tr>
+        <th>Username</th>
+        <th>Added</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <?php foreach ($data as $row): ?>
+        <tr>
+          <td><?= htmlspecialchars($row['username']) ?></td>
+          <td class="time" data-ts="<?= htmlspecialchars($row['created_at']) ?>">
+            <?= date('M d, Y H:i', strtotime($row['created_at'])) ?>
+          </td>
+          <td>
+            <form method="post" style="display:inline" onsubmit="return confirmDelete('<?= htmlspecialchars($row['username']) ?>')">
+              <input type="hidden" name="delete_id" value="<?= htmlspecialchars($row['id']) ?>">
+              <button type="submit" class="delete">Delete</button>
+            </form>
+          </td>
+        </tr>
+      <?php endforeach; ?>
+    </tbody>
   </table>
-  <?php endif; ?>
 
 <script>
-function refreshUser(username, index) {
-  fetch("refresh.php?username=" + encodeURIComponent(username))
-    .then(res => res.json())
-    .then(data => {
-      document.getElementById("status" + index).textContent = data.status.replace("_", " ");
-      document.getElementById("status" + index).className = "badge " + data.status;
-      document.getElementById("followers" + index).textContent = data.followers;
-      document.getElementById("following" + index).textContent = data.following;
-    })
-    .catch(err => console.error("Error:", err));
+function confirmDelete(username) {
+  return confirm(`Are you sure you want to delete "${username}"?`);
 }
+
+function timeAgo(ts) {
+  const diff = (Date.now() - new Date(ts).getTime()) / 1000;
+  const units = [
+    ['year', 31536000], ['month', 2592000],
+    ['day', 86400], ['hour', 3600],
+    ['minute', 60], ['second', 1]
+  ];
+  for (const [name, secs] of units) {
+    const v = Math.floor(diff / secs);
+    if (v >= 1) return `${v} ${name}${v>1?'s':''} ago`;
+  }
+  return 'just now';
+}
+
+document.querySelectorAll('[data-ts]').forEach(td => {
+  const ts = td.getAttribute('data-ts');
+  td.textContent = timeAgo(ts);
+  td.setAttribute('title', new Date(ts).toLocaleString());
+});
+
+setInterval(() => {
+  document.querySelectorAll('[data-ts]').forEach(td => {
+    const ts = td.getAttribute('data-ts');
+    td.textContent = timeAgo(ts);
+  });
+}, 60000);
 </script>
 </body>
 </html>
