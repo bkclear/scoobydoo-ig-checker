@@ -1,0 +1,19 @@
+body { font-family: monospace; background:#000; color:#0f0; padding:10px; margin:0; }
+h1 { text-align:center; color:#0f0; }
+form { background:#111; padding:12px; border-radius:6px; margin:10px auto; max-width:600px; }
+textarea,input { width:100%; padding:8px; background:#000; border:1px solid #0f0; color:#0f0; border-radius:4px; }
+button { margin-top:8px; padding:8px 14px; background:#0f0; color:#000; border:none; border-radius:4px; cursor:pointer; font-weight:bold; }
+button.delete { background:#f00; color:#fff; }
+table { width:100%; border-collapse:collapse; margin-top:15px; background:#111; }
+th,td { padding:8px; border:1px solid #0f0; text-align:left; font-size:14px; }
+.badge { padding:2px 6px; border-radius:8px; font-size:12px; }
+.exists { background:#0f0; color:#000; }
+.not_found { background:#f00; color:#fff; }
+.invalid_session { background:#555; color:#fff; }
+.error { background:#ff0; color:#000; }
+.clickable { cursor:pointer; }
+.table-wrapper { overflow-x:auto; }
+@media(max-width:600px){
+  table,th,td{font-size:12px;}
+  button{padding:6px 10px; font-size:12px;}
+}
