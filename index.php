@@ -35,6 +35,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
             file_put_contents($filename, implode("\n", $postedUsernames));
         }
         $savedUsernames = $postedUsernames;
+
+        // clear textarea after save
+        $_POST["usernames"] = "";
     }
 
     if ($action === "deleteUser" && !empty($_POST['username'])) {
@@ -54,7 +57,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Scooby Doo 🕵️ - Username Checker</title>
+  <title>Scooby Doo 🕵️</title>
   <style>
     body { 
       background:#000; 
@@ -62,18 +65,21 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       font-family:Courier, monospace; 
       margin:0; 
       padding:20px; 
+      overflow-x:hidden;
     }
     h1 { 
       text-align:center; 
       color:#0f0; 
       margin-bottom:20px; 
       text-shadow:0 0 8px #0f0, 0 0 15px #0f0;
+      position:relative;
+      z-index:2;
     }
     a { color:#0f0; text-decoration:none; font-weight:bold; }
-    .container { max-width:900px; margin:auto; }
+    .container { max-width:900px; margin:auto; position:relative; z-index:2; }
 
     .card { 
-      background:#111; 
+      background:rgba(0,0,0,0.85); 
       padding:20px; 
       border:1px solid #0f0; 
       border-radius:10px; 
@@ -161,10 +167,22 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     .countdown { font-size:12px; color:#0f0; margin-top:4px; }
 
     .table-wrapper { overflow-x:auto; }
+
+    /* Matrix canvas behind everything */
+    #matrix {
+      position:fixed;
+      top:0;
+      left:0;
+      width:100%;
+      height:100%;
+      background:black;
+      z-index:0;
+    }
   </style>
 </head>
 <body>
-  <h1>🕵️ Scooby Doo - Username Checker</h1>
+  <canvas id="matrix"></canvas>
+  <h1>🕵️ Scooby Doo</h1>
   <div class="container">
     
     <div class="card">
@@ -178,8 +196,8 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
     <div class="card">
       <h2>📋 Manage Usernames</h2>
-      <form method="post" onsubmit="stopAllTimers()">
-        <textarea name="usernames" rows="6"><?php echo htmlspecialchars(implode("\n", $savedUsernames)); ?></textarea><br>
+      <form method="post" onsubmit="stopAllTimers(); this.querySelector('textarea').value=''">
+        <textarea name="usernames" rows="6"></textarea><br>
         <button type="submit" name="action" value="startChecking" class="checkBtn">▶ Save Usernames</button>
       </form>
     </div>
@@ -284,6 +302,31 @@ function copyUsername(username) {
   navigator.clipboard.writeText(username);
   alert("Copied: @" + username);
 }
+
+// Matrix background
+const canvas = document.getElementById('matrix');
+const ctx = canvas.getContext('2d');
+canvas.height = window.innerHeight;
+canvas.width = window.innerWidth;
+const letters = "アァイィウヴエェオカガキギクグケゲコゴサザシジスズセゼソゾタダチヂッツヅテデトドナニヌネノハバパヒビピフブプヘベペホボポマミムメモヤユヨラリルレロワンABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+const matrix = letters.split("");
+const font_size = 14;
+const columns = canvas.width / font_size;
+let drops = [];
+for(let x = 0; x < columns; x++) drops[x] = 1;
+function draw() {
+  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.fillStyle = "#0F0";
+  ctx.font = font_size + "px monospace";
+  for(let i = 0; i < drops.length; i++) {
+    const text = matrix[Math.floor(Math.random()*matrix.length)];
+    ctx.fillText(text, i*font_size, drops[i]*font_size);
+    if(drops[i]*font_size > canvas.height && Math.random() > 0.975) drops[i] = 0;
+    drops[i]++;
+  }
+}
+setInterval(draw, 33);
 </script>
 </body>
 </html>
