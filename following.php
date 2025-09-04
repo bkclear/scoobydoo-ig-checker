@@ -1,91 +1,56 @@
+<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>👥 Scooby Doo - Following Viewer</title>
+  <title>👻 Scooby Doo - Following Viewer</title>
   <style>
-    body { background:black; color:#0f0; font-family:monospace; padding:20px; }
-    h2 { text-align:center; color:#0f0; }
-    form { text-align:center; margin-bottom:20px; }
-    input, button { padding:8px; border:none; border-radius:5px; }
-    input { width:200px; }
-    button { background:#0f0; color:black; font-weight:bold; cursor:pointer; }
-    button:hover { background:#090; color:#fff; }
-    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:15px; }
-    .card { background:#111; padding:10px; border:1px solid #0f0; border-radius:10px; text-align:center; }
-    .card img { border-radius:50%; width:80px; height:80px; margin-bottom:10px; }
-    .username { cursor:pointer; font-weight:bold; color:#0f0; display:block; margin-top:5px; }
-    .username:hover { text-decoration:underline; color:#9f9; }
-    .iglink { font-size:12px; color:#09f; text-decoration:none; }
-    .iglink:hover { text-decoration:underline; }
-    .small { font-size:12px; color:#999; }
+    body { background:black; color:#0f0; font-family:monospace; text-align:center; }
+    input, button { padding:10px; border:none; border-radius:5px; margin:5px; }
+    input { width:250px; }
+    button { cursor:pointer; background:#0f0; color:black; font-weight:bold; }
+    button:hover { background:#333; color:#0f0; }
+    .user-card { 
+      display:inline-block; 
+      border:1px solid #0f0; 
+      margin:10px; 
+      padding:10px; 
+      border-radius:10px; 
+      width:200px;
+    }
+    img { border-radius:50%; width:80px; height:80px; }
+    a { color:#0f0; text-decoration:none; }
+    a:hover { text-decoration:underline; }
   </style>
 </head>
 <body>
-  <h2>👥 Scooby Doo - Following Viewer</h2>
-  <form id="followingForm">
-    <input type="text" id="targetUser" placeholder="Enter target username" required>
-    <button type="submit">🔍 View Following</button>
-    <button type="button" id="refreshBtn" style="display:none;">🔄 Refresh</button>
-  </form>
+  <h1>👻 Scooby Doo - Following Viewer</h1>
+  <p>Enter Instagram username to see their <b>following (≤2k followers)</b>:</p>
+  <input type="text" id="targetUser" placeholder="username_here">
+  <button onclick="loadFollowing()">View Following</button>
 
-  <div id="result"></div>
+  <div id="results"></div>
 
 <script>
-let lastUser = null;
+function loadFollowing() {
+  const username = document.getElementById("targetUser").value.trim();
+  if (!username) {
+    alert("Enter a username first!");
+    return;
+  }
 
-document.getElementById("followingForm").addEventListener("submit", function(e){
-  e.preventDefault();
-  let username = document.getElementById("targetUser").value.trim();
-  if (!username) return;
-  lastUser = username;
-  fetchFollowing(username);
-  document.getElementById("refreshBtn").style.display = "inline-block";
-});
-
-document.getElementById("refreshBtn").addEventListener("click", function(){
-  if (lastUser) fetchFollowing(lastUser);
-});
-
-function fetchFollowing(username) {
-  lastUser = username;
-  document.getElementById("result").innerHTML = "<p>⏳ Fetching following for @" + username + "...</p>";
+  document.getElementById("results").innerHTML = "<p>⏳ Loading...</p>";
 
   fetch("view_following.php?username=" + encodeURIComponent(username))
-    .then(res => res.json())
-    .then(data => {
-      if (data.error) {
-        document.getElementById("result").innerHTML = "<p style='color:red;'>⚠ " + data.error + "</p>";
-        return;
-      }
-      if (!data.following || data.following.length === 0) {
-        document.getElementById("result").innerHTML = "<p>No following found.</p>";
-        return;
-      }
-
-      let filtered = data.following.filter(f => f.follower_count <= 2000);
-
-      let html = `<h3>Following of @${username} (≤ 2000 followers)</h3>`;
-      html += `<div class="grid">`;
-
-      filtered.forEach(f => {
-        let profileUrl = "https://instagram.com/" + f.username;
-        html += `
-          <div class="card">
-            <img src="${f.profile_pic}" alt="pic">
-            <div class="username">@${f.username}</div>
-            <div>${f.full_name || ''}</div>
-            <div class="small">Followers: ${f.follower_count}</div>
-            <a href="${profileUrl}" target="_blank" class="iglink">🔗 Open on Instagram</a>
-          </div>
-        `;
-      });
-
-      html += `</div>`;
-      document.getElementById("result").innerHTML = html;
+    .then(res => res.text())
+    .then(html => {
+      document.getElementById("results").innerHTML = html;
     })
     .catch(err => {
-      document.getElementById("result").innerHTML = "<p style='color:red;'>Error fetching following</p>";
+      document.getElementById("results").innerHTML = "<p style='color:red'>❌ Failed to fetch data.</p>";
       console.error(err);
     });
 }
