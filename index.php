@@ -4,6 +4,7 @@ ini_set('display_errors', 1);
 
 $cookiesFile = "cookies.txt";
 $filename    = "usernames.txt";
+$dataFile    = "data.json";
 $lastUpdated = file_exists("cookies_updated.txt") ? file_get_contents("cookies_updated.txt") : "Never";
 
 // Load cookies
@@ -17,6 +18,9 @@ if (file_exists($filename)) {
         $savedUsernames[] = ["name" => $u, "time" => $time];
     }
 }
+
+// Load last known user data
+$userData = file_exists($dataFile) ? json_decode(file_get_contents($dataFile), true) : [];
 
 // Handle actions
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
@@ -54,6 +58,12 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $savedUsernames = array_filter($savedUsernames, fn($row) => $row['name'] !== $usernameToDelete);
         $toSave = array_map(fn($row) => $row['name'] . "|" . $row['time'], $savedUsernames);
         file_put_contents($filename, implode("\n", $toSave));
+
+        // Also remove from data.json
+        if (isset($userData[$usernameToDelete])) {
+            unset($userData[$usernameToDelete]);
+            file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT));
+        }
     }
 }
 ?>
@@ -80,7 +90,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     .exists { background:#0f0; }
     .not_found { background:#f00; color:#fff; }
     .error { background:#ff0; color:#000; }
-    .invalid_session { background:#555; }
+    .invalid_session { background:#555; color:#fff; }
     .private { background:#ffa500; color:#000; }
     .copyable { cursor:pointer; }
     .copyable:hover { text-decoration:underline; }
@@ -122,14 +132,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       <th>Actions</th>
     </tr>
     <?php foreach ($savedUsernames as $i => $row): ?>
+    <?php $info = $userData[$row['name']] ?? ["status" => "-", "followers" => "-", "following" => "-"]; ?>
     <tr id="row<?php echo $i; ?>">
       <td class="copyable" onclick="copyUsername('<?php echo $row['name']; ?>')">
         <a href="https://instagram.com/<?php echo htmlspecialchars($row['name']); ?>" target="_blank">@<?php echo htmlspecialchars($row['name']); ?></a>
       </td>
       <td><?php echo htmlspecialchars($row['time']); ?></td>
-      <td><span class="badge" id="status<?php echo $i; ?>">-</span></td>
-      <td id="followers<?php echo $i; ?>">-</td>
-      <td id="following<?php echo $i; ?>">-</td>
+      <td><span class="badge <?php echo $info['status']; ?>" id="status<?php echo $i; ?>"><?php echo $info['status']; ?></span></td>
+      <td id="followers<?php echo $i; ?>"><?php echo $info['followers']; ?></td>
+      <td id="following<?php echo $i; ?>"><?php echo $info['following']; ?></td>
       <td>
         <button type="button" class="refreshBtn" onclick="refreshUser('<?php echo $row['name']; ?>',<?php echo $i; ?>)">🔄 Refresh</button>
         <button type="button" class="autoBtn" onclick="toggleAuto('<?php echo $row['name']; ?>',<?php echo $i; ?>)">⏱ Auto</button>
