@@ -1,7 +1,3 @@
-<?php
-error_reporting(E_ALL);
-ini_set('display_errors', 1);
-?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,10 +14,11 @@ ini_set('display_errors', 1);
     .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:15px; }
     .card { background:#111; padding:10px; border:1px solid #0f0; border-radius:10px; text-align:center; }
     .card img { border-radius:50%; width:80px; height:80px; margin-bottom:10px; }
-    .username { cursor:pointer; font-weight:bold; color:#0f0; }
-    .username:hover { text-decoration:underline; }
+    .username { cursor:pointer; font-weight:bold; color:#0f0; display:block; margin-top:5px; }
+    .username:hover { text-decoration:underline; color:#9f9; }
+    .iglink { font-size:12px; color:#09f; text-decoration:none; }
+    .iglink:hover { text-decoration:underline; }
     .small { font-size:12px; color:#999; }
-    .actions { text-align:center; margin:10px; }
   </style>
 </head>
 <body>
@@ -51,6 +48,7 @@ document.getElementById("refreshBtn").addEventListener("click", function(){
 });
 
 function fetchFollowers(username) {
+  lastUser = username;
   document.getElementById("result").innerHTML = "<p>⏳ Fetching followers for @" + username + "...</p>";
 
   fetch("view_followers.php?username=" + encodeURIComponent(username))
@@ -65,19 +63,20 @@ function fetchFollowers(username) {
         return;
       }
 
-      // Filter 2k below
       let filtered = data.followers.filter(f => f.follower_count <= 2000);
 
-      let html = `<h3>Found ${filtered.length} followers (≤ 2000 followers)</h3>`;
+      let html = `<h3>Followers of @${username} (≤ 2000 followers)</h3>`;
       html += `<div class="grid">`;
 
       filtered.forEach(f => {
+        let profileUrl = "https://instagram.com/" + f.username;
         html += `
           <div class="card">
             <img src="${f.profile_pic}" alt="pic">
-            <div class="username" onclick="copyUser('${f.username}')">@${f.username}</div>
+            <div class="username" onclick="fetchFollowers('${f.username}')">@${f.username}</div>
             <div>${f.full_name || ''}</div>
             <div class="small">Followers: ${f.follower_count}</div>
+            <a href="${profileUrl}" target="_blank" class="iglink">🔗 Open on Instagram</a>
           </div>
         `;
       });
@@ -89,12 +88,6 @@ function fetchFollowers(username) {
       document.getElementById("result").innerHTML = "<p style='color:red;'>Error fetching followers</p>";
       console.error(err);
     });
-}
-
-function copyUser(username) {
-  navigator.clipboard.writeText(username).then(() => {
-    alert("Copied @" + username);
-  });
 }
 </script>
 </body>
