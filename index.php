@@ -2,192 +2,155 @@
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
 
-$userFile = "usernames.json";
-$settingsFile = "settings.json";
+$cookiesFile = "cookies.txt";
+$userFile    = "usernames.txt";
 
-// Ensure storage files exist
-if (!file_exists($userFile)) file_put_contents($userFile, "[]");
-if (!file_exists($settingsFile)) file_put_contents($settingsFile, json_encode([
-    "sessionid" => "",
-    "csrftoken" => "",
-    "ds_user_id" => ""
-], JSON_PRETTY_PRINT));
+// --- Load Cookies ---
+$cookies = file_exists($cookiesFile) ? trim(file_get_contents($cookiesFile)) : "";
 
-function readJson($file) {
-    return json_decode(file_get_contents($file), true) ?: [];
-}
-function saveJson($file, $data) {
-    file_put_contents($file, json_encode($data, JSON_PRETTY_PRINT));
+// --- Load Saved Usernames ---
+$savedUsernames = [];
+if (file_exists($userFile)) {
+    $lines = file($userFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES);
+    foreach ($lines as $line) {
+        [$u, $t] = array_pad(explode("|", $line), 2, "");
+        $savedUsernames[] = ["username" => $u, "time" => $t];
+    }
 }
 
-$tab = $_GET['tab'] ?? 'usernames';
+// --- Handle Actions ---
+if ($_SERVER["REQUEST_METHOD"] === "POST") {
+    $action = $_POST['action'] ?? '';
 
-// --- Handle Usernames actions ---
-if ($tab === 'usernames') {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['username'])) {
-        $username = trim($_POST['username']);
-        if ($username !== "") {
-            $data = readJson($userFile);
-            $data[] = [
-                'id' => bin2hex(random_bytes(6)),
-                'username' => $username,
-                'created_at' => date('c')
-            ];
-            saveJson($userFile, $data);
+    // Add Username
+    if ($action === "addUsername" && !empty($_POST["newUsername"])) {
+        $newUsername = trim($_POST["newUsername"]);
+        $time = date("Y-m-d H:i:s");
+
+        $already = array_column($savedUsernames, "username");
+        if (!in_array($newUsername, $already)) {
+            $savedUsernames[] = ["username" => $newUsername, "time" => $time];
+            $lines = array_map(fn($row) => $row["username"] . "|" . $row["time"], $savedUsernames);
+            file_put_contents($userFile, implode("\n", $lines));
         }
-        header("Location: index.php?tab=usernames");
-        exit;
     }
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['delete_id'])) {
-        $id = $_POST['delete_id'];
-        $data = readJson($userFile);
-        $data = array_values(array_filter($data, fn($r) => $r['id'] !== $id));
-        saveJson($userFile, $data);
-        header("Location: index.php?tab=usernames");
-        exit;
+    // Delete Username
+    if ($action === "deleteUser" && !empty($_POST['username'])) {
+        $usernameToDelete = trim($_POST['username']);
+        $savedUsernames = array_filter($savedUsernames, fn($row) => $row["username"] !== $usernameToDelete);
+        $lines = array_map(fn($row) => $row["username"] . "|" . $row["time"], $savedUsernames);
+        file_put_contents($userFile, implode("\n", $lines));
     }
-    $data = readJson($userFile);
-    $settings = readJson($settingsFile);
-}
 
-// --- Handle Settings actions ---
-if ($tab === 'settings') {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        $settings = [
-            "sessionid" => trim($_POST['sessionid'] ?? ""),
-            "csrftoken" => trim($_POST['csrftoken'] ?? ""),
-            "ds_user_id" => trim($_POST['ds_user_id'] ?? "")
-        ];
-        saveJson($settingsFile, $settings);
-        header("Location: index.php?tab=settings&saved=1");
-        exit;
+    // Save Cookies
+    if ($action === "saveCookies" && isset($_POST['cookies'])) {
+        file_put_contents($cookiesFile, trim($_POST['cookies']));
+        $cookies = trim($_POST['cookies']);
     }
-    $settings = readJson($settingsFile);
 }
 ?>
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Scooby-Doo IG Checker</title>
-<style>
-  body { font-family: Arial, sans-serif; background:#111; color:#eee; margin:0; padding:0; }
-  nav { display:flex; background:#222; }
-  nav a { flex:1; padding:1rem; text-align:center; color:#fff; text-decoration:none; }
-  nav a.active { background:#28a745; }
-  .container { padding:1rem; }
-  h2 { margin-top:0; }
-  table { width:100%; border-collapse:collapse; background:#222; margin-top:1rem; }
-  th, td { padding:.75rem; border-bottom:1px solid #444; }
-  th { background:#333; }
-  tr:hover { background:#2a2a2a; }
-  input[type="text"], textarea { width:100%; padding:.5rem; border-radius:6px; border:none; margin-bottom:.5rem; }
-  button { padding:.5rem 1rem; border:none; border-radius:6px; cursor:pointer; }
-  button.add { background:#28a745; color:#fff; }
-  button.delete { background:#dc3545; color:#fff; }
-  button.save { background:#007bff; color:#fff; margin-top:.5rem; }
-  .time { font-size:.9em; color:#aaa; }
-  @media(max-width:600px){
-    table, thead, tbody, th, td, tr { display:block; }
-    th { display:none; }
-    td { border:none; padding:.5rem 0; }
-    td::before { font-weight:bold; display:block; }
-    td:nth-child(1)::before { content:"Username"; }
-    td:nth-child(2)::before { content:"Added"; }
-    td:nth-child(3)::before { content:"Action"; }
-  }
-  .status-box { background:#222; padding:1rem; border-radius:8px; margin-top:1rem; }
-  .status-box p { margin:.3rem 0; }
-</style>
+  <meta charset="UTF-8">
+  <title>Scooby Doo 🕵️ Username Checker</title>
+  <style>
+    body { background:#000; color:#0f0; font-family:monospace; padding:15px; }
+    h1 { text-align:center; }
+    nav { margin-bottom:20px; text-align:center; }
+    nav button { background:#111; border:1px solid #0f0; color:#0f0; padding:10px 20px; cursor:pointer; margin:5px; border-radius:8px; }
+    nav button.active { background:#0f0; color:#000; }
+    section { display:none; }
+    section.active { display:block; }
+    form { margin:15px 0; }
+    input, textarea { padding:6px; border:1px solid #0f0; border-radius:5px; background:#111; color:#0f0; width:100%; }
+    button { padding:6px 12px; border:none; border-radius:5px; margin:3px; cursor:pointer; }
+    .addBtn { background:#0f0; color:#000; }
+    .deleteBtn { background:#f00; color:#fff; }
+    .refreshBtn { background:#06f; color:#fff; }
+    table { width:100%; border-collapse:collapse; margin-top:20px; background:#111; }
+    th, td { padding:8px; border:1px solid #0f0; text-align:left; }
+    .badge { padding:4px 8px; border-radius:12px; font-size:13px; }
+    .exists { background:#0f0; color:#000; }
+    .not_found { background:#f00; color:#fff; }
+    .error { background:#ff0; color:#000; }
+    .invalid_session { background:#555; color:#fff; }
+  </style>
 </head>
 <body>
-<nav>
-  <a href="?tab=usernames" class="<?= $tab==='usernames'?'active':'' ?>">Usernames</a>
-  <a href="?tab=settings" class="<?= $tab==='settings'?'active':'' ?>">Settings</a>
-</nav>
-<div class="container">
+  <h1>🕵️ Scooby Doo - Username Checker</h1>
 
-<?php if ($tab==='usernames'): ?>
-  <h2>Manage Usernames</h2>
+  <nav>
+    <button onclick="showTab('usernames')" id="btn-usernames" class="active">📋 Usernames</button>
+    <button onclick="showTab('settings')" id="btn-settings">⚙️ Settings</button>
+  </nav>
 
-  <form method="post" style="display:flex; gap:.5rem;">
-    <input type="text" name="username" placeholder="Enter username..." required>
-    <button type="submit" class="add">Add</button>
-  </form>
+  <!-- Usernames Tab -->
+  <section id="usernames" class="active">
+    <form method="post">
+      <input type="text" name="newUsername" placeholder="Enter username">
+      <button type="submit" name="action" value="addUsername" class="addBtn">➕ Add</button>
+    </form>
 
-  <table>
-    <thead><tr><th>Username</th><th>Added</th><th>Action</th></tr></thead>
-    <tbody>
-      <?php foreach ($data as $row): ?>
-        <tr>
-          <td><?= htmlspecialchars($row['username']) ?></td>
-          <td class="time" data-ts="<?= htmlspecialchars($row['created_at']) ?>">
-            <?= date('M d, Y H:i', strtotime($row['created_at'])) ?>
-          </td>
-          <td>
-            <form method="post" style="display:inline" onsubmit="return confirmDelete('<?= htmlspecialchars($row['username']) ?>')">
-              <input type="hidden" name="delete_id" value="<?= htmlspecialchars($row['id']) ?>">
-              <button type="submit" class="delete">Delete</button>
-            </form>
-          </td>
-        </tr>
+    <?php if (!empty($savedUsernames)): ?>
+    <table>
+      <tr>
+        <th>Username</th>
+        <th>Added At</th>
+        <th>Status</th>
+        <th>Followers</th>
+        <th>Following</th>
+        <th>Actions</th>
+      </tr>
+      <?php foreach ($savedUsernames as $i => $row): ?>
+      <tr>
+        <td>@<?php echo htmlspecialchars($row["username"]); ?></td>
+        <td><?php echo htmlspecialchars($row["time"]); ?></td>
+        <td><span class="badge" id="status<?php echo $i; ?>">-</span></td>
+        <td id="followers<?php echo $i; ?>">-</td>
+        <td id="following<?php echo $i; ?>">-</td>
+        <td>
+          <button type="button" class="refreshBtn" onclick="refreshUser('<?php echo $row["username"]; ?>',<?php echo $i; ?>)">🔄 Refresh</button>
+          <form method="post" style="display:inline;">
+            <input type="hidden" name="username" value="<?php echo htmlspecialchars($row["username"]); ?>">
+            <button type="submit" name="action" value="deleteUser" class="deleteBtn" onclick="return confirm('Delete this username?')">🗑 Delete</button>
+          </form>
+        </td>
+      </tr>
       <?php endforeach; ?>
-    </tbody>
-  </table>
+    </table>
+    <?php endif; ?>
+  </section>
 
-  <div class="status-box">
-    <h3>🔑 Current Settings</h3>
-    <p><strong>sessionid:</strong> <?= $settings['sessionid'] ? substr($settings['sessionid'],0,6).'...' : '<i>Not set</i>' ?></p>
-    <p><strong>csrftoken:</strong> <?= $settings['csrftoken'] ? substr($settings['csrftoken'],0,6).'...' : '<i>Not set</i>' ?></p>
-    <p><strong>ds_user_id:</strong> <?= $settings['ds_user_id'] ?: '<i>Not set</i>' ?></p>
-  </div>
+  <!-- Settings Tab -->
+  <section id="settings">
+    <form method="post">
+      <h2>⚙️ Manage Cookies</h2>
+      <textarea name="cookies" rows="5" placeholder="Paste Instagram cookies here..."><?php echo htmlspecialchars($cookies); ?></textarea>
+      <button type="submit" name="action" value="saveCookies" class="addBtn">💾 Save Cookies</button>
+    </form>
+  </section>
 
-<?php elseif ($tab==='settings'): ?>
-  <h2>Settings</h2>
-  <?php if (!empty($_GET['saved'])): ?><p style="color:#28a745;">✅ Settings saved!</p><?php endif; ?>
-  <form method="post">
-    <label>sessionid</label>
-    <input type="text" name="sessionid" value="<?= htmlspecialchars($settings['sessionid']) ?>">
-    <label>csrftoken</label>
-    <input type="text" name="csrftoken" value="<?= htmlspecialchars($settings['csrftoken']) ?>">
-    <label>ds_user_id</label>
-    <input type="text" name="ds_user_id" value="<?= htmlspecialchars($settings['ds_user_id']) ?>">
-    <button type="submit" class="save">Save Settings</button>
-  </form>
-<?php endif; ?>
-
-</div>
 <script>
-function confirmDelete(username) {
-  return confirm(`Delete "${username}"?`);
+function showTab(tab) {
+  document.querySelectorAll("section").forEach(sec => sec.classList.remove("active"));
+  document.querySelectorAll("nav button").forEach(btn => btn.classList.remove("active"));
+  document.getElementById(tab).classList.add("active");
+  document.getElementById("btn-" + tab).classList.add("active");
 }
 
-// Friendly "time ago"
-function timeAgo(ts) {
-  const diff = (Date.now() - new Date(ts).getTime())/1000;
-  const units = [
-    ['year',31536000],['month',2592000],['day',86400],
-    ['hour',3600],['minute',60],['second',1]
-  ];
-  for (const [n,sec] of units) {
-    const v = Math.floor(diff/sec);
-    if (v>=1) return v+" "+n+(v>1?"s":"")+" ago";
-  }
-  return "just now";
+function refreshUser(username, index) {
+  fetch("refresh.php?username=" + encodeURIComponent(username))
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById("status" + index).textContent = data.status.replace("_", " ");
+      document.getElementById("status" + index).className = "badge " + data.status;
+      document.getElementById("followers" + index).textContent = data.followers;
+      document.getElementById("following" + index).textContent = data.following;
+    })
+    .catch(err => console.error("Error:", err));
 }
-document.querySelectorAll('[data-ts]').forEach(td=>{
-  const ts=td.getAttribute('data-ts');
-  td.textContent=timeAgo(ts);
-  td.title=new Date(ts).toLocaleString();
-});
-setInterval(()=>{
-  document.querySelectorAll('[data-ts]').forEach(td=>{
-    const ts=td.getAttribute('data-ts');
-    td.textContent=timeAgo(ts);
-  });
-},60000);
 </script>
 </body>
 </html>
