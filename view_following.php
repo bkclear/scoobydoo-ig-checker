@@ -1,68 +1,90 @@
 <?php
-header("Content-Type: application/json");
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
-$cookies = file_exists("cookies.txt") ? trim(file_get_contents("cookies.txt")) : "";
-if (empty($cookies)) {
-    echo json_encode(["error" => "No cookies found. Please save cookies first."]);
-    exit;
+// Load cookies
+$cookiesFile = "cookies.txt";
+if (!file_exists($cookiesFile)) {
+    die("<p style='color:red'>❌ Cookies file missing. Please save Instagram cookies first.</p>");
+}
+$cookies = trim(file_get_contents($cookiesFile));
+
+function igRequest($url, $cookies) {
+    $headers = [
+        "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept: */*",
+        "Cookie: $cookies",
+    ];
+
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    $res = curl_exec($ch);
+    curl_close($ch);
+    return $res;
 }
 
-$username = $_GET["username"] ?? "";
-if (empty($username)) {
-    echo json_encode(["error" => "No username provided"]);
-    exit;
+// Get username
+$username = $_GET['username'] ?? '';
+if (!$username) {
+    die("<p style='color:red'>❌ No username provided.</p>");
 }
 
-$ch = curl_init("https://www.instagram.com/$username/?__a=1&__d=dis");
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Cookie: $cookies",
-    "User-Agent: Mozilla/5.0"
-]);
-$response = curl_exec($ch);
-curl_close($ch);
+// Step 1: Get user_id
+$profileUrl = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
+$res = igRequest($profileUrl, $cookies);
+$data = json_decode($res, true);
 
-if (!$response) {
-    echo json_encode(["error" => "Failed to fetch profile"]);
-    exit;
+if (!isset($data['data']['user']['id'])) {
+    die("<p style='color:red'>❌ Could not fetch user ID. Check cookies or username.</p>");
 }
+$userId = $data['data']['user']['id'];
 
-$data = json_decode($response, true);
-
-if (!isset($data["graphql"]["user"]["id"])) {
-    echo json_encode(["error" => "User not found or cookies expired"]);
-    exit;
-}
-
-$userId = $data["graphql"]["user"]["id"];
-
-// Fetch following (limit ~50 per page)
-$ch = curl_init("https://i.instagram.com/api/v1/friendships/$userId/following/?count=50");
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Cookie: $cookies",
-    "User-Agent: Instagram 155.0.0.37.107"
-]);
-$response = curl_exec($ch);
-curl_close($ch);
-
-if (!$response) {
-    echo json_encode(["error" => "Failed to fetch following"]);
-    exit;
-}
-
-$json = json_decode($response, true);
+// Step 2: Get following list
+$next = null;
 $following = [];
+$count = 0;
 
-if (isset($json["users"])) {
-    foreach ($json["users"] as $u) {
-        $following[] = [
-            "username" => $u["username"],
-            "full_name" => $u["full_name"],
-            "profile_pic" => $u["profile_pic_url"],
-            "follower_count" => $u["follower_count"] ?? 0
-        ];
+do {
+    $url = "https://i.instagram.com/api/v1/friendships/$userId/following/?count=50";
+    if ($next) $url .= "&max_id=" . urlencode($next);
+
+    $res = igRequest($url, $cookies);
+    $json = json_decode($res, true);
+
+    if (!isset($json['users'])) break;
+
+    foreach ($json['users'] as $u) {
+        $followersCount = $u['follower_count'] ?? 0;
+        if ($followersCount <= 2000) {
+            $following[] = [
+                "username" => $u['username'],
+                "full_name" => $u['full_name'],
+                "profile_pic" => $u['profile_pic_url'],
+                "followers" => $followersCount
+            ];
+        }
+        $count++;
+    }
+
+    $next = $json['next_max_id'] ?? null;
+    usleep(500000); // delay 0.5s to avoid rate limit
+
+} while ($next && $count < 2000);
+
+// Step 3: Show result
+if (empty($following)) {
+    echo "<p>No following found with ≤2k followers.</p>";
+} else {
+    foreach ($following as $f) {
+        echo "<div class='user-card'>";
+        echo "<img src='".htmlspecialchars($f['profile_pic'])."' alt='pic'><br>";
+        echo "<a href='https://instagram.com/".htmlspecialchars($f['username'])."' target='_blank'>";
+        echo "@".htmlspecialchars($f['username'])."</a><br>";
+        echo "<small>".htmlspecialchars($f['full_name'])."</small><br>";
+        echo "<small>Followers: ".$f['followers']."</small>";
+        echo "</div>";
     }
 }
-
-echo json_encode(["following" => $following]);
