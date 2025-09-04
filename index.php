@@ -17,7 +17,7 @@ $savedUsernames = file_exists($usernamesFile) ? file($usernamesFile, FILE_IGNORE
 $userData = file_exists($dataFile) ? json_decode(file_get_contents($dataFile), true) : [];
 if (!is_array($userData)) $userData = [];
 
-// Ensure each username has data
+// Ensure consistency
 foreach ($savedUsernames as $u) {
     if (!isset($userData[$u])) {
         $userData[$u] = [
@@ -31,9 +31,8 @@ foreach ($savedUsernames as $u) {
 }
 file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
 
-// Handle AJAX
+// Handle AJAX actions
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
-    header("Content-Type: application/json");
     $action = $_POST['action'] ?? '';
 
     if ($action === "saveCookies" && !empty($_POST['cookies'])) {
@@ -48,11 +47,17 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $raw = trim($_POST['usernames'] ?? '');
         $newList = array_filter(array_map('trim', preg_split('/\r\n|\r|\n/', $raw)));
 
+        // Load existing
         $savedUsernames = file_exists($usernamesFile) ? file($usernamesFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : [];
-        $merged = array_values(array_unique(array_merge($savedUsernames, $newList)));
+
+        // Merge + dedupe (case-insensitive)
+        $merged = array_values(array_unique(array_merge($savedUsernames, $newList), SORT_STRING | SORT_FLAG_CASE));
 
         file_put_contents($usernamesFile, implode("\n", $merged));
-        foreach ($merged as $u) {
+        $savedUsernames = $merged;
+
+        // Update data file
+        foreach ($savedUsernames as $u) {
             if (!isset($userData[$u])) {
                 $userData[$u] = [
                     "status" => "-",
@@ -63,9 +68,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 ];
             }
         }
+        foreach ($userData as $u => $_v) {
+            if (!in_array($u, $savedUsernames, true)) unset($userData[$u]);
+        }
         file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
 
-        echo json_encode(["ok" => true, "usernames" => $merged, "userData" => $userData]);
+        echo json_encode(["ok" => true, "usernames" => $savedUsernames, "userData" => $userData]);
         exit;
     }
 
@@ -73,7 +81,6 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         $usernameToDelete = trim($_POST['username']);
         $savedUsernames = array_filter($savedUsernames, fn($u) => $u !== $usernameToDelete);
         file_put_contents($usernamesFile, implode("\n", $savedUsernames));
-
         if (isset($userData[$usernameToDelete])) {
             unset($userData[$usernameToDelete]);
             file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
@@ -115,6 +122,7 @@ th{position:sticky;top:0;background:#222;z-index:1}
 .copyable:hover{text-decoration:underline;color:#ff0}
 .countdown{font-size:12px;color:#0f0;margin-top:4px}
 #search{margin-bottom:10px}
+.legend span{margin-right:10px}
 #matrix{position:fixed;top:0;left:0;width:100%;height:100%;background:black;z-index:0}
 .banner{background:#f00;color:#fff;padding:10px;text-align:center;margin-bottom:10px;border-radius:5px}
 </style>
@@ -139,11 +147,19 @@ th{position:sticky;top:0;background:#222;z-index:1}
   <button onclick="addUsernames()" class="checkBtn">▶ Save Usernames</button>
 </div>
 
+<?php if (!empty($savedUsernames)): ?>
 <div class="card">
   <h2>📊 Username Status</h2>
   <input type="text" id="search" placeholder="🔍 Search username..." onkeyup="filterTable()">
+  <div class="legend">
+    <span class="badge exists">Exists</span>
+    <span class="badge not_found">Not Found</span>
+    <span class="badge invalid_session">Invalid Session</span>
+    <span class="badge error">Error</span>
+  </div>
   <br>
   <button onclick="refreshAll()" class="bulkBtn">🔄 Refresh All</button>
+  <button onclick="toggleAllAuto()" class="bulkBtn">⏱ Auto All</button>
   <label>Interval:
     <select id="intervalSelect" onchange="setGlobalInterval(this.value)">
       <option value="30">30s</option>
@@ -174,6 +190,7 @@ th{position:sticky;top:0;background:#222;z-index:1}
         <td id="last<?php echo $i; ?>"><?php echo $info['last_checked'] ?? '-'; ?></td>
         <td>
           <button class="refreshBtn" onclick="refreshUser('<?php echo $username; ?>',<?php echo $i; ?>)">🔄</button>
+          <button class="autoBtn" onclick="toggleAuto('<?php echo $username; ?>',<?php echo $i; ?>)">⏱</button>
           <button class="deleteBtn" onclick="deleteUser('<?php echo $username; ?>')">🗑</button>
           <div class="countdown" id="countdown<?php echo $i; ?>"></div>
         </td>
@@ -182,58 +199,27 @@ th{position:sticky;top:0;background:#222;z-index:1}
     </table>
   </div>
 </div>
+<?php endif; ?>
 
 </div>
 <script>
-let interval=120;
-
+let interval=120;let timers={};let autoAll=false;
 function setGlobalInterval(val){interval=parseInt(val);}
-
 function saveCookies(){
   fetch("index.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"action=saveCookies&cookies="+encodeURIComponent(document.getElementById("cookiesBox").value)})
   .then(r=>r.json()).then(d=>alert(d.message));
 }
-
 function addUsernames(){
   const val=document.getElementById("usernamesInput").value;
   if(!val.trim())return;
   fetch("index.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"action=addUsernames&usernames="+encodeURIComponent(val)})
-  .then(r=>r.json())
-  .then(data=>{
-    document.getElementById("usernamesInput").value="";
-    if(data.usernames){
-      const table=document.getElementById("userTable");
-      data.usernames.forEach((u,i)=>{
-        if(!document.getElementById("row"+i)){
-          let row=table.insertRow();
-          row.id="row"+i;
-          row.innerHTML=`<td>@${u}</td>
-            <td id="status${i}">-</td>
-            <td id="followers${i}">-</td>
-            <td id="following${i}">-</td>
-            <td id="last${i}">-</td>
-            <td><button class="refreshBtn" onclick="refreshUser('${u}',${i})">🔄</button>
-            <button class="deleteBtn" onclick="deleteUser('${u}')">🗑</button>
-            <div class="countdown" id="countdown${i}"></div></td>`;
-        }
-      });
-    }
-  });
+  .then(r=>r.json()).then(()=>location.reload());
 }
-
 function deleteUser(username){
   if(!confirm("Delete @"+username+"?"))return;
   fetch("index.php",{method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded"},body:"action=deleteUser&username="+encodeURIComponent(username)})
-  .then(r=>r.json())
-  .then(data=>{
-    if(data.ok){
-      document.querySelectorAll("#userTable tr").forEach(row=>{
-        if(row.innerText.includes(username)) row.remove();
-      });
-    }
-  });
+  .then(r=>r.json()).then(()=>location.reload());
 }
-
 function refreshUser(username,index){
   fetch("refresh.php?username="+encodeURIComponent(username))
     .then(res=>res.json())
@@ -246,24 +232,23 @@ function refreshUser(username,index){
       document.getElementById("last"+index).textContent=data.last_checked||"-";
     });
 }
-
-// Throttled refresh all (1s delay between each)
-function refreshAll(){
-  const rows=[...document.querySelectorAll("#userTable tr")].slice(1);
-  rows.forEach((row,i)=>{
-    setTimeout(()=>{
-      let u=row.cells[0].innerText.replace("@","");
-      refreshUser(u,i-1);
-    }, i*1000);
-  });
+function refreshAll(){document.querySelectorAll("#userTable tr").forEach((row,i)=>{if(i>0){let u=row.cells[0].innerText.replace("@","");refreshUser(u,i-1);}});}
+function toggleAuto(username,index){
+  if(timers[index]){clearInterval(timers[index].id);delete timers[index];document.getElementById("countdown"+index).innerText="";return;}
+  let seconds=interval;
+  document.getElementById("countdown"+index).innerText="Next "+seconds+"s";
+  timers[index]={id:setInterval(()=>{seconds--;if(seconds<=0){refreshUser(username,index);seconds=interval;}document.getElementById("countdown"+index).innerText="Next "+seconds+"s";},1000)};
 }
-
+function toggleAllAuto(){
+  autoAll=!autoAll;
+  if(autoAll){refreshAll();document.querySelectorAll("#userTable tr").forEach((row,i)=>{if(i>0){let u=row.cells[0].innerText.replace("@","");toggleAuto(u,i-1);}});}
+  else{for(let i in timers)clearInterval(timers[i].id);timers={};document.querySelectorAll(".countdown").forEach(el=>el.innerText="");}
+}
 function copyUsername(u){navigator.clipboard.writeText(u);alert("Copied: @"+u);}
 function filterTable(){
   let v=document.getElementById("search").value.toLowerCase();
   document.querySelectorAll("#userTable tr").forEach((row,i)=>{if(i===0)return;row.style.display=row.innerText.toLowerCase().includes(v)?"":"none";});
 }
-
 // Matrix BG
 const c=document.getElementById("matrix"),ctx=c.getContext("2d");c.height=window.innerHeight;c.width=window.innerWidth;
 const letters="アァイィウヴエェオカガキギクグケゲコゴサザシジスズセゼソゾABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789".split("");const fs=14,cols=c.width/fs;let drops=[];for(let x=0;x<cols;x++)drops[x]=1;
