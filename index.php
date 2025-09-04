@@ -16,6 +16,14 @@ $savedUsernames = file_exists($filename) ? file($filename, FILE_IGNORE_NEW_LINES
 // Load user data (status/followers/following)
 $userData = file_exists($dataFile) ? json_decode(file_get_contents($dataFile), true) : [];
 
+// Ensure all usernames exist in data.json
+foreach ($savedUsernames as $u) {
+    if (!isset($userData[$u])) {
+        $userData[$u] = ["status" => "-", "followers" => "-", "following" => "-"];
+    }
+}
+file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT));
+
 // Handle actions
 if ($_SERVER["REQUEST_METHOD"] == "POST") {
     $action = $_POST['action'] ?? '';
@@ -36,7 +44,15 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         }
         $savedUsernames = $postedUsernames;
 
-        // clear textarea after save
+        // Ensure new usernames have entries
+        foreach ($savedUsernames as $u) {
+            if (!isset($userData[$u])) {
+                $userData[$u] = ["status" => "-", "followers" => "-", "following" => "-"];
+            }
+        }
+        file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT));
+
+        // clear textarea
         $_POST["usernames"] = "";
     }
 
@@ -45,7 +61,6 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
         $savedUsernames = array_filter($savedUsernames, fn($u) => $u !== $usernameToDelete);
         file_put_contents($filename, implode("\n", $savedUsernames));
 
-        // Remove from data.json too
         if (isset($userData[$usernameToDelete])) {
             unset($userData[$usernameToDelete]);
             file_put_contents($dataFile, json_encode($userData, JSON_PRETTY_PRINT));
@@ -75,11 +90,10 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
       position:relative;
       z-index:2;
     }
-    a { color:#0f0; text-decoration:none; font-weight:bold; }
     .container { max-width:900px; margin:auto; position:relative; z-index:2; }
 
     .card { 
-      background:rgba(0,0,0,0.85); 
+      background:rgba(0,0,0,0.8); 
       padding:20px; 
       border:1px solid #0f0; 
       border-radius:10px; 
@@ -122,16 +136,9 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
     button:hover { transform:scale(1.05); }
 
     .saveBtn, .checkBtn { background:#0f0; color:#000; box-shadow:0 0 10px #0f0; }
-    .saveBtn:hover, .checkBtn:hover { box-shadow:0 0 20px #0f0; }
-
     .refreshBtn { background:#00f; color:#fff; box-shadow:0 0 10px #00f; }
-    .refreshBtn:hover { box-shadow:0 0 20px #00f; }
-
     .autoBtn { background:#060; color:#0f0; box-shadow:0 0 10px #0f0; }
-    .autoBtn:hover { box-shadow:0 0 20px #0f0; }
-
     .deleteBtn { background:#f00; color:#fff; box-shadow:0 0 10px #f00; }
-    .deleteBtn:hover { box-shadow:0 0 20px #f00; }
 
     table { 
       width:100%; 
@@ -244,7 +251,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST") {
   </div>
 
 <script>
-let interval = 120; // seconds
+let interval = 120;
 let timers = {};
 
 function refreshUser(username, index) {
@@ -315,7 +322,7 @@ const columns = canvas.width / font_size;
 let drops = [];
 for(let x = 0; x < columns; x++) drops[x] = 1;
 function draw() {
-  ctx.fillStyle = "rgba(0, 0, 0, 0.05)";
+  ctx.fillStyle = "rgba(0, 0, 0, 0.08)";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = "#0F0";
   ctx.font = font_size + "px monospace";
