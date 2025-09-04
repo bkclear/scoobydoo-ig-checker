@@ -27,7 +27,7 @@ function checkUser($username, $cookies, $csrftoken) {
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
     curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-    curl_setopt($ch, CURLOPT_TIMEOUT, 10);
+    curl_setopt($ch, CURLOPT_TIMEOUT, 12);
     $response = curl_exec($ch);
     $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
     curl_close($ch);
@@ -43,8 +43,7 @@ function checkUser($username, $cookies, $csrftoken) {
             ];
         }
         return ["status" => "not_found", "followers" => 0, "following" => 0];
-    }
-    elseif ($httpcode == 401 || $httpcode == 403) {
+    } elseif ($httpcode == 401 || $httpcode == 403) {
         return ["status" => "invalid_session", "followers" => 0, "following" => 0];
     }
     return ["status" => "error", "followers" => 0, "following" => 0];
@@ -53,12 +52,39 @@ function checkUser($username, $cookies, $csrftoken) {
 $username = trim($_GET['username'] ?? "");
 if ($username) {
     header("Content-Type: application/json");
+
     $result = checkUser($username, $cookies, $csrftoken);
 
-    // Save result into data.json
+    // Append to history + update last snapshot
     $data = file_exists($dataFile) ? json_decode(file_get_contents($dataFile), true) : [];
-    $data[$username] = array_merge($result, ["time" => date("Y-m-d H:i:s")]);
-    file_put_contents($dataFile, json_encode($data, JSON_PRETTY_PRINT));
+    if (!is_array($data)) $data = [];
+    if (!isset($data[$username])) {
+        $data[$username] = ["status"=>"-","followers"=>"-","following"=>"-","last_checked"=>null,"history"=>[]];
+    }
 
-    echo json_encode($result, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+    $now = date("Y-m-d H:i:s");
+    $data[$username]['status'] = $result['status'];
+    $data[$username]['followers'] = $result['followers'];
+    $data[$username]['following'] = $result['following'];
+    $data[$username]['last_checked'] = $now;
+
+    // History entry
+    if (!isset($data[$username]['history']) || !is_array($data[$username]['history'])) {
+        $data[$username]['history'] = [];
+    }
+    $data[$username]['history'][] = [
+        "time" => $now,
+        "status" => $result['status'],
+        "followers" => $result['followers'],
+        "following" => $result['following']
+    ];
+
+    // Optionally cap history length to avoid huge files (keep last 200)
+    if (count($data[$username]['history']) > 200) {
+        $data[$username]['history'] = array_slice($data[$username]['history'], -200);
+    }
+
+    file_put_contents($dataFile, json_encode($data, JSON_PRETTY_PRINT|JSON_UNESCAPED_SLASHES));
+
+    echo json_encode($result, JSON_UNESCAPED_SLASHES);
 }
