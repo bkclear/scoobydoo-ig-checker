@@ -1,109 +1,100 @@
 <?php
 error_reporting(E_ALL);
 ini_set('display_errors', 1);
-
-$cookiesFile = "cookies.txt";
-$lastUpdated = file_exists("cookies_updated.txt") ? file_get_contents("cookies_updated.txt") : "Never";
-$cookies = file_exists($cookiesFile) ? trim(file_get_contents($cookiesFile)) : "";
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Scooby Doo - Followers Viewer</title>
+  <title>👥 Scooby Doo - Followers Viewer</title>
   <style>
-    body { background:#000; color:#0f0; font-family:Courier, monospace; padding:15px; }
-    h1 { text-align:center; color:#0f0; }
-    a { color:#0f0; margin:0 10px; text-decoration:none; }
-    form { background:#111; padding:15px; border:1px solid #0f0; border-radius:8px; max-width:600px; margin:auto; }
-    textarea, input { width:100%; padding:8px; background:#000; color:#0f0; border:1px solid #0f0; border-radius:5px; }
-    button { margin-top:8px; padding:10px 15px; border:none; border-radius:5px; cursor:pointer; background:#0f0; color:#000; font-weight:bold; }
-    table { width:100%; border-collapse:collapse; margin-top:20px; background:#111; }
-    th, td { padding:10px; border:1px solid #0f0; text-align:left; }
-    img { border-radius:50%; }
-    .copyable { cursor:pointer; color:#0f0; }
-    .copyable:hover { text-decoration:underline; }
-    #followersContainer { margin-top:20px; }
-    #paginationControls button { background:#0f0; color:#000; margin:5px; }
+    body { background:black; color:#0f0; font-family:monospace; padding:20px; }
+    h2 { text-align:center; color:#0f0; }
+    form { text-align:center; margin-bottom:20px; }
+    input, button { padding:8px; border:none; border-radius:5px; }
+    input { width:200px; }
+    button { background:#0f0; color:black; font-weight:bold; cursor:pointer; }
+    button:hover { background:#090; color:#fff; }
+    .grid { display:grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap:15px; }
+    .card { background:#111; padding:10px; border:1px solid #0f0; border-radius:10px; text-align:center; }
+    .card img { border-radius:50%; width:80px; height:80px; margin-bottom:10px; }
+    .username { cursor:pointer; font-weight:bold; color:#0f0; }
+    .username:hover { text-decoration:underline; }
+    .small { font-size:12px; color:#999; }
+    .actions { text-align:center; margin:10px; }
   </style>
 </head>
 <body>
-  <h1>👥 Scooby Doo - Followers Viewer</h1>
-  <div style="text-align:center;">
-    <a href="index.php">🔍 Username Checker</a> | 
-    <a href="followers.php">👥 Followers Viewer</a>
-  </div>
-  <br>
-  <form method="post" id="cookieForm">
-    <label>Paste Instagram cookies:</label>
-    <textarea name="cookies" rows="3"><?php echo htmlspecialchars($cookies); ?></textarea>
-    <br><small>Last updated: <?php echo $lastUpdated; ?></small><br>
-    <button type="submit" name="action" value="saveCookies">💾 Save Cookies</button>
+  <h2>👥 Scooby Doo - Followers Viewer</h2>
+  <form id="followerForm">
+    <input type="text" id="targetUser" placeholder="Enter target username" required>
+    <button type="submit">🔍 View Followers</button>
+    <button type="button" id="refreshBtn" style="display:none;">🔄 Refresh</button>
   </form>
 
-  <br>
-  <form onsubmit="event.preventDefault(); fetchFollowers();">
-    <label>Target Username:</label>
-    <input type="text" id="targetUser" placeholder="example_user">
-    <button type="submit">👀 View Followers</button>
-  </form>
-
-  <div id="followersContainer"></div>
-  <div id="paginationControls" style="text-align:center;"></div>
+  <div id="result"></div>
 
 <script>
-let allFollowers = [];
-let currentPage = 1;
-const perPage = 50;
+let lastUser = null;
 
-function fetchFollowers() {
+document.getElementById("followerForm").addEventListener("submit", function(e){
+  e.preventDefault();
   let username = document.getElementById("targetUser").value.trim();
   if (!username) return;
+  lastUser = username;
+  fetchFollowers(username);
+  document.getElementById("refreshBtn").style.display = "inline-block";
+});
+
+document.getElementById("refreshBtn").addEventListener("click", function(){
+  if (lastUser) fetchFollowers(lastUser);
+});
+
+function fetchFollowers(username) {
+  document.getElementById("result").innerHTML = "<p>⏳ Fetching followers for @" + username + "...</p>";
 
   fetch("view_followers.php?username=" + encodeURIComponent(username))
     .then(res => res.json())
     .then(data => {
-      allFollowers = data;
-      if (allFollowers.length === 0) {
-        document.getElementById("followersContainer").innerHTML = "<p style='color:red;'>No followers found or error.</p>";
-      } else {
-        renderPage(1);
+      if (data.error) {
+        document.getElementById("result").innerHTML = "<p style='color:red;'>⚠ " + data.error + "</p>";
+        return;
       }
+      if (!data.followers || data.followers.length === 0) {
+        document.getElementById("result").innerHTML = "<p>No followers found.</p>";
+        return;
+      }
+
+      // Filter 2k below
+      let filtered = data.followers.filter(f => f.follower_count <= 2000);
+
+      let html = `<h3>Found ${filtered.length} followers (≤ 2000 followers)</h3>`;
+      html += `<div class="grid">`;
+
+      filtered.forEach(f => {
+        html += `
+          <div class="card">
+            <img src="${f.profile_pic}" alt="pic">
+            <div class="username" onclick="copyUser('${f.username}')">@${f.username}</div>
+            <div>${f.full_name || ''}</div>
+            <div class="small">Followers: ${f.follower_count}</div>
+          </div>
+        `;
+      });
+
+      html += `</div>`;
+      document.getElementById("result").innerHTML = html;
     })
     .catch(err => {
-      document.getElementById("followersContainer").innerHTML = "<p style='color:red;'>Error fetching followers</p>";
+      document.getElementById("result").innerHTML = "<p style='color:red;'>Error fetching followers</p>";
       console.error(err);
     });
 }
 
-function renderPage(page) {
-  currentPage = page;
-  const start = (page - 1) * perPage;
-  const end = start + perPage;
-  const sliced = allFollowers.slice(start, end);
-
-  let html = `<h3>Followers (Page ${page})</h3><table><tr><th>Pic</th><th>Username</th></tr>`;
-  sliced.forEach(f => {
-    html += `
-      <tr>
-        <td><img src="${f.pic}" width="40" height="40"></td>
-        <td><span class="copyable" onclick="copyUsername('${f.username}')">@${f.username}</span></td>
-      </tr>`;
+function copyUser(username) {
+  navigator.clipboard.writeText(username).then(() => {
+    alert("Copied @" + username);
   });
-  html += `</table>`;
-  document.getElementById("followersContainer").innerHTML = html;
-
-  // Pagination controls
-  let totalPages = Math.ceil(allFollowers.length / perPage);
-  let controls = "";
-  if (page > 1) controls += `<button onclick="renderPage(${page-1})">⬅ Prev</button>`;
-  if (page < totalPages) controls += `<button onclick="renderPage(${page+1})">Next ➡</button>`;
-  document.getElementById("paginationControls").innerHTML = controls;
-}
-
-function copyUsername(username) {
-  navigator.clipboard.writeText(username);
-  alert("Copied: @" + username);
 }
 </script>
 </body>
