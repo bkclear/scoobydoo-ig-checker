@@ -1,87 +1,72 @@
 <?php
-header("Content-Type: application/json");
+// Returns JSON: { status: "exists"|"not_found"|"invalid_session"|"error", followers, following, message?, raw? }
+header('Content-Type: application/json');
 
-$username = $_GET["username"] ?? "";
-$username = trim($username);
-
-if ($username === "") {
-    echo json_encode(["status" => "error", "message" => "No username provided"]);
+$username = isset($_GET['username']) ? trim($_GET['username']) : '';
+if ($username === '') {
+    echo json_encode(['status'=>'error','message'=>'No username provided']);
     exit;
 }
 
-// Load cookies
-$cookiesFile = "cookies.txt";
-if (!file_exists($cookiesFile) || trim(file_get_contents($cookiesFile)) === "") {
-    echo json_encode(["status" => "error", "message" => "No cookies set."]);
+$cookiesFile = 'cookies.txt';
+if (!file_exists($cookiesFile) || trim(file_get_contents($cookiesFile)) === '') {
+    echo json_encode(['status'=>'error','message'=>'No cookies set']);
     exit;
 }
 $cookies = trim(file_get_contents($cookiesFile));
 
-// Build Instagram URL (web profile API)
-$url = "https://www.instagram.com/$username/?__a=1&__d=dis";
+// Use the web_profile_info endpoint (more stable lately)
+$url = 'https://www.instagram.com/api/v1/users/web_profile_info/?username=' . urlencode($username);
 
-// cURL request
+$headers = [
+    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+    "Accept: application/json",
+    "Referer: https://www.instagram.com/",
+    "X-IG-App-ID: 936619743392459",
+    "Cookie: $cookies"
+];
+
 $ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, [
-    "Cookie: $cookies",
-    "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0 Safari/537.36",
+curl_setopt_array($ch, [
+    CURLOPT_URL => $url,
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_HTTPHEADER => $headers,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_FOLLOWLOCATION => true,
+    CURLOPT_HEADER => false,
 ]);
 $response = curl_exec($ch);
 $httpcode = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 curl_close($ch);
 
-if ($httpcode === 403) {
-    echo json_encode(["status" => "invalid_session"]);
+// Common failure codes
+if ($httpcode === 401 || $httpcode === 403) {
+    echo json_encode(['status'=>'invalid_session','followers'=>0,'following'=>0,'message'=>'Cookies expired or blocked']);
     exit;
 }
 if ($httpcode === 404) {
-    echo json_encode(["status" => "not_found"]);
+    echo json_encode(['status'=>'not_found','followers'=>0,'following'=>0]);
     exit;
 }
 if ($httpcode !== 200 || !$response) {
-    echo json_encode(["status" => "error", "message" => "HTTP $httpcode"]);
+    echo json_encode(['status'=>'error','followers'=>0,'following'=>0,'message'=>"Unexpected HTTP code $httpcode",'raw'=>substr((string)$response,0,200)]);
     exit;
 }
 
-// Parse JSON
+// Parse JSON safely
 $data = json_decode($response, true);
-if (!$data) {
-    echo json_encode(["status" => "error", "message" => "Invalid JSON"]);
+if (!is_array($data)) {
+    echo json_encode(['status'=>'error','followers'=>0,'following'=>0,'message'=>'Invalid JSON','raw'=>substr((string)$response,0,200)]);
     exit;
 }
 
-try {
-    // Instagram changes structure often, try multiple paths
-    if (isset($data["graphql"]["user"])) {
-        $user = $data["graphql"]["user"];
-        $followers = $user["edge_followed_by"]["count"] ?? 0;
-        $following = $user["edge_follow"]["count"] ?? 0;
-
-        echo json_encode([
-            "status" => "exists",
-            "followers" => $followers,
-            "following" => $following
-        ]);
-        exit;
-    } elseif (isset($data["user"])) {
-        // Fallback path
-        $user = $data["user"];
-        $followers = $user["edge_followed_by"]["count"] ?? 0;
-        $following = $user["edge_follow"]["count"] ?? 0;
-
-        echo json_encode([
-            "status" => "exists",
-            "followers" => $followers,
-            "following" => $following
-        ]);
-        exit;
-    } else {
-        echo json_encode(["status" => "error", "message" => "User data missing"]);
-        exit;
-    }
-} catch (Exception $e) {
-    echo json_encode(["status" => "error", "message" => $e->getMessage()]);
+if (isset($data['data']['user'])) {
+    $u = $data['data']['user'];
+    $followers = $u['edge_followed_by']['count'] ?? 0;
+    $following = $u['edge_follow']['count'] ?? 0;
+    echo json_encode(['status'=>'exists','followers'=>$followers,'following'=>$following]);
     exit;
 }
+
+// Fallback—Instagram changed shape
+echo json_encode(['status'=>'error','followers'=>0,'following'=>0,'message'=>'User data missing','raw'=>substr((string)$response,0,200)]);
