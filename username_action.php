@@ -10,28 +10,26 @@ if (!isset($_SESSION["user_id"])) {
 $user_id = $_SESSION["user_id"];
 $action = $_POST["action"] ?? "";
 
-if ($action === "add") {
-    $username = trim($_POST["username"] ?? "");
-    if ($username === "") {
-        echo json_encode(["error"=>"Empty username"]);
-        exit;
+if ($action === "add_bulk") {
+    $usernames = explode("\n", trim($_POST["usernames"] ?? ""));
+    $added = 0;
+    foreach ($usernames as $u) {
+        $u = trim($u);
+        if ($u === "") continue;
+        try {
+            $stmt = $db->prepare("INSERT INTO usernames (user_id, name) VALUES (?, ?)");
+            $stmt->execute([$user_id, $u]);
+            $added++;
+        } catch (Exception $e) {}
     }
-    $stmt = $db->prepare("INSERT INTO usernames (user_id, name) VALUES (?, ?)");
-    try {
-        $stmt->execute([$user_id, $username]);
-        echo json_encode(["success"=>true]);
-    } catch (Exception $e) {
-        echo json_encode(["error"=>"Already exists"]);
-    }
+    echo json_encode(["success"=>true, "added"=>$added]);
     exit;
 }
 
 if ($action === "delete") {
-    $id = intval($_POST["id"] ?? 0);
+    $id = intval($_POST["id"]);
     $stmt = $db->prepare("DELETE FROM usernames WHERE id = ? AND user_id = ?");
     $stmt->execute([$id, $user_id]);
     echo json_encode(["success"=>true]);
     exit;
 }
-
-echo json_encode(["error"=>"Invalid action"]);
