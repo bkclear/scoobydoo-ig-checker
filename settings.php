@@ -22,20 +22,39 @@ $user = $stmt->fetch();
 $cookies = $user["cookies"] ?? "";
 ?>
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <title>Settings - Scooby Doo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { background:#000; color:#0f0; font-family:monospace; margin:0; }
+    header { background:#111; padding:10px; text-align:center; }
+    header h1 { margin:5px; font-size:22px; }
+    nav a { color:#0ff; margin:0 10px; text-decoration:none; }
+    nav a:hover { text-decoration:underline; }
+    .container { padding:15px; }
+    textarea { width:100%; height:120px; background:#111; color:#0f0; border:1px solid #333; border-radius:4px; padding:6px; }
+    button { margin-top:10px; padding:8px 15px; border:none; border-radius:4px; background:#0f0; color:#000; cursor:pointer; }
+  </style>
 </head>
-<body style="background:black;color:lime;font-family:monospace;">
-  <h1>⚙️ Settings</h1>
-  <a href="index.php" style="color:#0ff;">⬅ Back</a> | 
-  <a href="logout.php" style="color:red;">Logout</a>
-  <hr>
-  <?php if (!empty($msg)) echo "<p>$msg</p>"; ?>
-  <form method="post">
-    <label>Paste Instagram Cookies:</label><br>
-    <textarea name="cookies" rows="5" style="width:100%;background:#111;color:#0f0;"><?php echo htmlspecialchars($cookies); ?></textarea><br>
-    <button type="submit">Save Cookies</button>
-  </form>
+<body>
+  <header>
+    <h1>⚙️ Scooby Doo - Settings</h1>
+    <nav>
+      <a href="index.php">🏠 Home</a>
+      <a href="settings.php">⚙️ Settings</a>
+      <a href="logout.php" style="color:red;">🚪 Logout</a>
+    </nav>
+  </header>
+
+  <div class="container">
+    <?php if (!empty($msg)) echo "<p>$msg</p>"; ?>
+    <form method="post">
+      <label>Instagram Cookies:</label><br>
+      <textarea name="cookies"><?php echo htmlspecialchars($cookies); ?></textarea><br>
+      <button type="submit">💾 Save Cookies</button>
+    </form>
+  </div>
 </body>
 </html>
