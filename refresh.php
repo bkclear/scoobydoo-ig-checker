@@ -2,7 +2,7 @@
 error_reporting(0);
 
 $cookiesFile = "cookies.txt";
-$dataFile    = "data.json";
+$dataFile = "data.json";
 
 $cookies = file_exists($cookiesFile) ? trim(file_get_contents($cookiesFile)) : "";
 $csrftoken = "";
@@ -36,15 +36,6 @@ function checkUser($username, $cookies, $csrftoken) {
         $data = json_decode($response, true);
         if (isset($data['data']['user'])) {
             $user = $data['data']['user'];
-
-            if (!empty($user['is_private'])) {
-                return [
-                    "status" => "private",
-                    "followers" => $user['edge_followed_by']['count'] ?? 0,
-                    "following" => $user['edge_follow']['count'] ?? 0
-                ];
-            }
-
             return [
                 "status" => "exists",
                 "followers" => $user['edge_followed_by']['count'] ?? 0,
@@ -56,7 +47,7 @@ function checkUser($username, $cookies, $csrftoken) {
     elseif ($httpcode == 401 || $httpcode == 403) {
         return ["status" => "invalid_session", "followers" => 0, "following" => 0];
     }
-    return ["status" => "error", "http_code" => $httpcode, "followers" => 0, "following" => 0];
+    return ["status" => "error", "followers" => 0, "following" => 0];
 }
 
 $username = trim($_GET['username'] ?? "");
@@ -64,7 +55,7 @@ if ($username) {
     header("Content-Type: application/json");
     $result = checkUser($username, $cookies, $csrftoken);
 
-    // Save last known data
+    // Save result into data.json
     $data = file_exists($dataFile) ? json_decode(file_get_contents($dataFile), true) : [];
     $data[$username] = array_merge($result, ["time" => date("Y-m-d H:i:s")]);
     file_put_contents($dataFile, json_encode($data, JSON_PRETTY_PRINT));
