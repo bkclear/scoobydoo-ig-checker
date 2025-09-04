@@ -1,37 +1,27 @@
 <?php
-error_reporting(0);
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
-$cookies = file_exists("cookies.txt") ? trim(file_get_contents("cookies.txt")) : "";
-$username = $_GET['username'] ?? "";
+$cookiesFile = "cookies.txt";
+$cookies = file_exists($cookiesFile) ? trim(file_get_contents($cookiesFile)) : "";
 
-if (!$username || !$cookies) {
-    echo json_encode([]);
-    exit;
+function getUserId($username, $cookies) {
+    $url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
+    $headers = [
+        "User-Agent: Mozilla/5.0",
+        "Cookie: $cookies"
+    ];
+    $ch = curl_init();
+    curl_setopt($ch, CURLOPT_URL, $url);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
+    curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
+    $res = curl_exec($ch);
+    curl_close($ch);
+    $data = json_decode($res, true);
+    return $data['data']['user']['id'] ?? null;
 }
 
-// Step 1: Get user ID
-$url = "https://www.instagram.com/api/v1/users/web_profile_info/?username=" . urlencode($username);
-$headers = [
-    "User-Agent: Mozilla/5.0",
-    "Accept: application/json",
-    "Cookie: $cookies"
-];
-$ch = curl_init();
-curl_setopt($ch, CURLOPT_URL, $url);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
-$res = curl_exec($ch);
-curl_close($ch);
-$data = json_decode($res, true);
-
-if (!isset($data['data']['user']['id'])) {
-    echo json_encode([]);
-    exit;
-}
-$userId = $data['data']['user']['id'];
-
-// Step 2: Get followers list
 function getFollowersList($userId, $cookies, $limit = 2000) {
     $followers = [];
     $maxId = "";
@@ -41,7 +31,7 @@ function getFollowersList($userId, $cookies, $limit = 2000) {
     ];
 
     while (count($followers) < $limit) {
-        $url = "https://i.instagram.com/api/v1/friendships/$userId/followers/?count=50" . 
+        $url = "https://i.instagram.com/api/v1/friendships/$userId/followers/?count=50" .
                ($maxId ? "&max_id=$maxId" : "");
 
         $ch = curl_init();
@@ -60,7 +50,7 @@ function getFollowersList($userId, $cookies, $limit = 2000) {
                 "username" => $u['username'],
                 "pic" => $u['profile_pic_url']
             ];
-            if (count($followers) >= $limit) break;
+            if (count($followers) >= $limit) break 2;
         }
 
         if (isset($data['next_max_id'])) {
@@ -73,4 +63,18 @@ function getFollowersList($userId, $cookies, $limit = 2000) {
     return $followers;
 }
 
-echo json_encode(getFollowersList($userId, $cookies, 2000));
+$username = $_GET['username'] ?? "";
+if (!$username || !$cookies) {
+    echo json_encode([]);
+    exit;
+}
+
+$userId = getUserId($username, $cookies);
+if (!$userId) {
+    echo json_encode([]);
+    exit;
+}
+
+$followers = getFollowersList($userId, $cookies, 2000);
+header("Content-Type: application/json");
+echo json_encode($followers);
